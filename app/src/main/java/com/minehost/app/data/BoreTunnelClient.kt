@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.BufferedInputStream
 import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
 import java.io.DataOutputStream
@@ -210,23 +211,35 @@ class TunnelManager(private val configProvider: suspend () -> TunnelSettings) {
             relay.tcpNoDelay = true
             relay.connect(InetSocketAddress(settings.relayHost, CONTROL_PORT), CONNECT_TIMEOUT_MS)
             relay.soTimeout = 15_000
-            val relayInput = DataInputStream(relay.getInputStream().buffered())
+            // Keep ONE buffered reader for the whole data connection: wrapping
+            // relay.getInputStream() again for the splice would drop whatever
+            // this reader pulled ahead, swallowing the player's handshake.
+            val relayInput = BufferedInputStream(relay.getInputStream())
             val relayOutput = DataOutputStream(relay.getOutputStream().buffered())
             sendFrame(relayOutput, acceptMessage(uuid))
             // The relay answers Accept with an empty NUL-delimited frame;
             // consume it, then treat the socket as a raw byte pipe.
-            runCatching { readFrame(relayInput) }
+            runCatching { readFrame(DataInputStream(relayInput)) }
 
             relay.soTimeout = 0
+            // Drain the framed writer into the socket before switching to the
+            // raw stream for payload traffic, so ordering is preserved.
+            relayOutput.flush()
+
             val local = register(Socket())
             try {
                 local.tcpNoDelay = true
                 local.connect(InetSocketAddress("127.0.0.1", settings.localPort), CONNECT_TIMEOUT_MS)
-                relay.getInputStream().copyTo(local.getOutputStream(), BUFFER_SIZE)
+                // Pipe BOTH ways; the server's replies must reach the player.
+                splicePlayerConnection(relay, relayInput, relay.getOutputStream(), local, BUFFER_SIZE)
             } finally {
                 runCatching { local.close() }
                 openSockets.remove(local)
             }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            // One player dropping must never take the whole tunnel down.
         } finally {
             runCatching { relay.close() }
             openSockets.remove(relay)

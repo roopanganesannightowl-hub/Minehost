@@ -14,6 +14,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.BufferedInputStream
 import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
 import java.io.IOException
@@ -294,19 +295,28 @@ class PlayitTunnelClient(private val configProvider: suspend () -> PlayitTunnelS
                 relay.getOutputStream().write(client.claimToken)
                 relay.getOutputStream().flush()
 
+                // Keep ONE buffered reader for the whole player session: a
+                // second wrapper over relay.getInputStream() could not see the
+                // bytes this one already read ahead, which is the head of the
+                // player's handshake.
+                val relayInput = BufferedInputStream(relay.getInputStream())
                 val confirmation = ByteArray(CLAIM_CONFIRMATION_BYTES)
-                val input = DataInputStream(relay.getInputStream().buffered())
-                input.readFully(confirmation)
+                DataInputStream(relayInput).readFully(confirmation)
 
                 val local = register(Socket())
                 try {
                     local.tcpNoDelay = true
                     local.connect(InetSocketAddress("127.0.0.1", settings.localPort), CONNECT_TIMEOUT_MS)
-                    relay.getInputStream().copyTo(local.getOutputStream(), BUFFER_SIZE)
+                    // Pipe BOTH ways; the server's replies must reach the player.
+                    splicePlayerConnection(relay, relayInput, relay.getOutputStream(), local, BUFFER_SIZE)
                 } finally {
                     runCatching { local.close() }
                     openSockets.remove(local)
                 }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                // One player dropping must never take the whole tunnel down.
             } finally {
                 runCatching { relay.close() }
                 openSockets.remove(relay)
