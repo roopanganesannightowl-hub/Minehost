@@ -550,6 +550,32 @@ fun SettingsScreen(
                         Text(error, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                     }
                 }
+                if (!BuildConfig.LOCAL_RUNTIME_BUILD) {
+                    Spacer(Modifier.height(10.dp))
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp),
+                        color = MaterialTheme.colorScheme.secondaryContainer
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(3.dp)
+                        ) {
+                            Text(
+                                "One-tap Java install lives in the MineHost local build",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                            Text(
+                                "Android does not let this build run programs it downloaded itself, so it cannot " +
+                                    "install Java. The MineHost local APK has an \"Install Android Java\" button that " +
+                                    "fetches a checksum-verified OpenJDK 21 from GitHub, tests it, and selects it.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.82f)
+                            )
+                        }
+                    }
+                }
                 Spacer(Modifier.height(10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                     OutlinedButton(

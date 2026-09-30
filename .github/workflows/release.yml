@@ -62,19 +62,25 @@ jobs:
           keyPassword=$KEY_PASSWORD
           EOF
 
-      - name: Build signed release APK
-        run: ./gradlew assembleStandardRelease
+      - name: Build signed release APKs
+        # Two flavors: standard (modern target SDK) and local (legacy target
+        # SDK 28, which may execute the on-demand Android Java runtime).
+        run: ./gradlew assembleStandardRelease assembleLocalRelease
 
-      - name: Verify APK signature
+      - name: Verify APK signatures
         run: |
           APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -1)
           "$APKSIGNER" verify --print-certs app/build/outputs/apk/standard/release/app-standard-release.apk
+          "$APKSIGNER" verify --print-certs app/build/outputs/apk/local/release/app-local-release.apk
 
-      - name: Name the APK after the release
+      - name: Name the APKs after the release
         run: |
           NAME="MineHost-${GITHUB_REF_NAME:-dev}.apk"
+          LOCAL_NAME="MineHost-${GITHUB_REF_NAME:-dev}-local.apk"
           cp app/build/outputs/apk/standard/release/app-standard-release.apk "$NAME"
+          cp app/build/outputs/apk/local/release/app-local-release.apk "$LOCAL_NAME"
           echo "APK_NAME=$NAME" >> "$GITHUB_ENV"
+          echo "APK_LOCAL_NAME=$LOCAL_NAME" >> "$GITHUB_ENV"
 
       - name: Create or update GitHub release
         # Idempotent so a re-run of an already published tag replaces the APK
@@ -84,9 +90,9 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" "$APK_NAME" --clobber
+            gh release upload "$GITHUB_REF_NAME" "$APK_NAME" "$APK_LOCAL_NAME" --clobber
           else
-            gh release create "$GITHUB_REF_NAME" "$APK_NAME" \
+            gh release create "$GITHUB_REF_NAME" "$APK_NAME" "$APK_LOCAL_NAME" \
               --title "MineHost $GITHUB_REF_NAME" \
               --generate-notes
           fi
