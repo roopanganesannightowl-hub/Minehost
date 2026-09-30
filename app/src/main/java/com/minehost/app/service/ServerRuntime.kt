@@ -31,6 +31,7 @@ private val READY_PATTERN = Regex("Done \\([0-9.]+s\\)")
 private val ANSI_PATTERN = Regex("\u001B\\[[0-9;?]*[ -/]*[@-~]")
 private const val READY_TIMEOUT_MS = 5 * 60 * 1000L
 private const val EMIT_INTERVAL_MS = 250L
+private const val IDLE_EMIT_INTERVAL_MS = 1_000L
 private const val LOG_CAPACITY = 240
 private const val GRACEFUL_STOP_SECONDS = 15L
 private const val METRIC_SAMPLE_TICKS = 4L
@@ -69,7 +70,11 @@ class ServerRuntime(context: Context) {
         scope.launch {
             var tick = 0L
             while (true) {
-                delay(EMIT_INTERVAL_MS)
+                // Idle processes need no 250 ms cadence: when the server is down
+                // and nothing is staged, one wakeup per second is plenty and
+                // keeps a live timer from burning battery in the background.
+                val idle = synchronized(lock) { !hasStaged && !stagedSnapshot.isActive }
+                delay(if (idle) IDLE_EMIT_INTERVAL_MS else EMIT_INTERVAL_MS)
                 tick++
                 if (tick % METRIC_SAMPLE_TICKS == 0L) sampleProcessMetrics()
                 publish()
@@ -178,6 +183,17 @@ class ServerRuntime(context: Context) {
         if (config.enableRcon && config.rconPassword.isBlank()) {
             fail("Add an RCON password in Settings before starting.")
             return
+        }
+        // A heap the device cannot back is the number-one way a phone-hosted
+        // server gets OOM-killed mid-game. Warn honestly instead of failing.
+        deviceRamMb()?.let { totalDeviceMb ->
+            if (config.memoryMb > totalDeviceMb / 2) {
+                appendLog(
+                    "Warning: a ${config.memoryMb} MB heap on a ${totalDeviceMb} MB device leaves little " +
+                        "room for Android. If the server gets killed, lower the memory limit.",
+                    ConsoleLevel.WARNING
+                )
+            }
         }
 
         val coreFile = File(corePath)
@@ -486,9 +502,10 @@ class ServerRuntime(context: Context) {
                 "-XX:MaxGCPauseMillis=50",
                 "-XX:+UnlockExperimentalVMOptions",
                 "-XX:+DisableExplicitGC",
+                "-XX:+UseStringDeduplication",
                 "-XX:G1NewSizePercent=30",
                 "-XX:G1MaxNewSizePercent=40",
-                "-XX:G1HeapRegionSize=8M",
+                "-XX:G1HeapRegionSize=${g1RegionSizeMb(config.memoryMb)}M",
                 "-XX:G1ReservePercent=20",
                 "-XX:InitiatingHeapOccupancyPercent=15",
                 "-XX:MaxTenuringThreshold=1"
@@ -522,6 +539,27 @@ class ServerRuntime(context: Context) {
             }
         }
     }
+
+    /**
+     * G1 region size matched to the configured heap. A fixed 8 M only suits
+     * multi-gigabyte heaps; on a 1–2 GB phone heap it leaves G1 with barely a
+     * couple hundred regions to schedule, which hurts pause times. Must stay
+     * a power of two between 1 M and 32 M.
+     */
+    private fun g1RegionSizeMb(memoryMb: Int): Int = when {
+        memoryMb >= 6144 -> 16
+        memoryMb >= 2048 -> 8
+        memoryMb >= 1024 -> 4
+        else -> 2
+    }
+
+    /** Total device RAM in MB, or null when it cannot be read. */
+    private fun deviceRamMb(): Long? = runCatching {
+        val info = android.app.ActivityManager.MemoryInfo()
+        (appContext.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager)
+            .getMemoryInfo(info)
+        info.totalMem / (1024L * 1024L)
+    }.getOrNull()
 
     /** Recognises JVM options so they can be placed before `-jar`. */
     private fun isJvmFlag(argument: String): Boolean =
