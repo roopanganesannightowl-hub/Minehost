@@ -8,3 +8,6 @@ captures/
 .cxx/
 keystore/
 .kotlin/
+
+# Local release signing secrets - never commit
+RELEASE-SECRETS.txt
