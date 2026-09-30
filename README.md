@@ -61,6 +61,21 @@ The project has two distribution flavors:
 
 The local runtime is downloaded on demand from a pinned Android-native GitHub archive, verified by SHA-256, extracted into app-private storage, and self-tested with `java -version`. It is ARM64-only and requires roughly 700 MB of free storage during installation.
 
+## Releasing
+
+Two GitHub Actions workflows handle releases:
+
+- **CI** runs the unit tests and a debug build on every push and pull request to `main`.
+- **Release** runs on a `v*` tag: it runs the tests, builds `assembleStandardRelease` signed with the keystore from repository secrets, verifies the signature with `apksigner`, and attaches the APK to a GitHub release. Re-running an already published tag replaces the APK instead of failing.
+
+Publishing a new signed release:
+
+```bash
+git tag v0.02 && git push origin v0.02
+```
+
+The signing material lives in `keystore/` (gitignored): `release.keystore` plus `keystore.properties` with `storeFile`, `storePassword`, `keyAlias`, and `keyPassword`. **Back this directory up — losing the keystore means you can never update the published app again.** The same four values are stored as repository secrets (`KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`); `./keystore/upload-secrets.sh` uploads them with a token that may manage repository secrets.
+
 ## Public access note
 
 MineHost exposes a Java Edition server with what the device can actually do on its own:
