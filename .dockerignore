@@ -1,0 +1,16 @@
+# Keep the devcontainer build context tiny (app/build alone is ~800 MB).
+.git
+.gradle
+.kotlin
+build
+**/build
+.idea
+*.iml
+captures
+.externalNativeBuild
+.cxx
+local.properties
+keystore
+*.apk
+*.aab
+*.jks

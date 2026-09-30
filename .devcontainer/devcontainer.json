@@ -1,0 +1,38 @@
+{
+  "name": "MineHost Android",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+  "remoteUser": "vscode",
+  "hostRequirements": {
+    "cpus": 4,
+    "memory": "8gb"
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "fwcd.kotlin",
+        "vscjava.vscode-java-pack",
+        "vscjava.vscode-gradle",
+        "mhutchie.git-graph",
+        "github.vscode-pull-request-github"
+      ],
+      "settings": {
+        "java.jdt.ls.java.home": "/opt/java-17",
+        "java.configuration.runtimes": [
+          {
+            "name": "JavaSE-17",
+            "path": "/opt/java-17",
+            "default": true
+          }
+        ],
+        "files.watcherExclude": {
+          "**/.gradle/**": true,
+          "**/build/**": true
+        }
+      }
+    }
+  },
+  "postCreateCommand": "bash .devcontainer/post-create.sh"
+}
