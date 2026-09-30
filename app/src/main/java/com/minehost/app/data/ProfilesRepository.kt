@@ -52,12 +52,13 @@ class ProfilesRepository(private val context: Context) {
     suspend fun activeConfig(): ServerConfig = current().active?.config ?: ServerConfig()
 
     suspend fun create(name: String): String {
+        val trimmed = name.trim().ifBlank { "Server" }
         val id = UUID.randomUUID().toString()
         val profile = ServerProfile(
             id = id,
-            name = name,
+            name = trimmed,
             createdAt = System.currentTimeMillis(),
-            config = ServerConfig(profileId = id, serverName = name)
+            config = ServerConfig(profileId = id, serverName = trimmed)
         )
         context.profilesDataStore.edit { preferences ->
             val state = parse(preferences[Keys.profilesJson], preferences[Keys.activeId])

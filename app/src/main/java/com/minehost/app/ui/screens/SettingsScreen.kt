@@ -139,7 +139,25 @@ fun SettingsScreen(
         lanEndpoint = "$ip:${config.port}"
     }
     val localEndpoint = "127.0.0.1:${config.port}"
-    var draft by remember(config) { mutableStateOf(config) }
+    // The draft is seeded per profile. While this screen is open, external
+    // saves (core import, world restore, pack imports) must NOT wipe what the
+    // user already typed: fields the user left untouched follow the saved
+    // config, edited fields win. A profile switch starts from a clean draft.
+    var baseline by remember(config.profileId) { mutableStateOf(config) }
+    var draft by remember(config.profileId) { mutableStateOf(config) }
+    androidx.compose.runtime.LaunchedEffect(config) {
+        if (config == baseline) return@LaunchedEffect
+        val old = baseline
+        baseline = config
+        // Base is the draft (keeps every edit); only fields the user never
+        // touched are refreshed from the newly saved config.
+        draft = draft.copy(
+            corePath = if (draft.corePath == old.corePath) config.corePath else draft.corePath,
+            coreName = if (draft.coreName == old.coreName) config.coreName else draft.coreName,
+            resourcePackPath = if (draft.resourcePackPath == old.resourcePackPath) config.resourcePackPath else draft.resourcePackPath,
+            modpackPath = if (draft.modpackPath == old.modpackPath) config.modpackPath else draft.modpackPath
+        )
+    }
     var javaCheck by remember { mutableStateOf<JavaRuntimeCheck?>(null) }
     var checkingJava by remember { mutableStateOf(false) }
     var installingJava by remember { mutableStateOf(false) }
@@ -298,29 +316,21 @@ fun SettingsScreen(
         item {
             SettingsCard {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                    OutlinedTextField(
-                        value = draft.port.toString(),
-                        onValueChange = { value ->
-                            value.filter { it.isDigit() }.take(5).toIntOrNull()?.let {
-                                draft = draft.copy(port = it)
-                            }
-                        },
-                        label = { Text("Port") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier.weight(1f)
+                    EditableNumberField(
+                        label = "Port",
+                        value = draft.port,
+                        maxDigits = 5,
+                        coerce = { it.coerceIn(1, 65535) },
+                        modifier = Modifier.weight(1f),
+                        onValueChange = { draft = draft.copy(port = it) }
                     )
-                    OutlinedTextField(
-                        value = draft.maxPlayers.toString(),
-                        onValueChange = { value ->
-                            value.filter { it.isDigit() }.take(3).toIntOrNull()?.let {
-                                draft = draft.copy(maxPlayers = it)
-                            }
-                        },
-                        label = { Text("Max players") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier.weight(1f)
+                    EditableNumberField(
+                        label = "Max players",
+                        value = draft.maxPlayers,
+                        maxDigits = 3,
+                        coerce = { it.coerceIn(1, 500) },
+                        modifier = Modifier.weight(1f),
+                        onValueChange = { draft = draft.copy(maxPlayers = it) }
                     )
                 }
                 Spacer(Modifier.height(13.dp))
@@ -1392,19 +1402,50 @@ private fun NumberSetting(
     onValueChange: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    // Local text state so the field can actually be cleared and negative
+    // values (like -1 for "compression off") can be typed; a fully controlled
+    // field snaps back on every keystroke that does not parse yet.
+    var text by remember(value) { mutableStateOf(value.toString()) }
     OutlinedTextField(
-        value = value.toString(),
-        onValueChange = { text ->
-            text.filter { it.isDigit() || (it == '-' && text.firstOrNull() == '-') }
-                .take(7)
-                .toIntOrNull()
-                ?.let(onValueChange)
+        value = text,
+        onValueChange = { input ->
+            text = input.filterIndexed { index, character ->
+                character.isDigit() || (character == '-' && index == 0)
+            }.take(7)
+            text.toIntOrNull()?.let(onValueChange)
         },
         label = { Text(label) },
         supportingText = { Text(range) },
         singleLine = true,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
         modifier = modifier.fillMaxWidth()
+    )
+}
+
+/**
+ * Digits-only field with the same forgiving editing model as [NumberSetting]:
+ * the box can be emptied mid-edit, and the value is clamped once it parses.
+ */
+@Composable
+private fun EditableNumberField(
+    label: String,
+    value: Int,
+    maxDigits: Int,
+    coerce: (Int) -> Int,
+    onValueChange: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var text by remember(value) { mutableStateOf(value.toString()) }
+    OutlinedTextField(
+        value = text,
+        onValueChange = { input ->
+            text = input.filter { it.isDigit() }.take(maxDigits)
+            text.toIntOrNull()?.let { onValueChange(coerce(it)) }
+        },
+        label = { Text(label) },
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        modifier = modifier
     )
 }
 

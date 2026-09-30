@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Clear
 import androidx.compose.material.icons.rounded.CloudDownload
 import androidx.compose.material.icons.rounded.Code
 import androidx.compose.material.icons.rounded.Info
@@ -244,7 +245,7 @@ fun CatalogScreen(
                 trailingIcon = {
                     if (versionQuery.isNotBlank()) {
                         IconButton(onClick = { versionQuery = "" }) {
-                            Icon(Icons.Rounded.Refresh, contentDescription = "Clear version search")
+                            Icon(Icons.Rounded.Clear, contentDescription = "Clear version search")
                         }
                     }
                 }

@@ -91,8 +91,10 @@ object ServerConfigJson {
         resourcePackSha1 = json.optString("resourcePackSha1", ""),
         requireResourcePack = json.optBoolean("requireResourcePack", false),
         resourcePackPrompt = json.optString("resourcePackPrompt", ""),
-        resourcePackPath = json.optString("resourcePackPath").takeIf { it.isNotBlank() },
-        modpackPath = json.optString("modpackPath").takeIf { it.isNotBlank() },
+        // optStringOrNull, not optString: Android's optString renders an
+        // explicit JSON null as the literal string "null".
+        resourcePackPath = json.optStringOrNull("resourcePackPath")?.takeIf { it.isNotBlank() },
+        modpackPath = json.optStringOrNull("modpackPath")?.takeIf { it.isNotBlank() },
         enableStatus = json.optBoolean("enableStatus", true),
         hideOnlinePlayers = json.optBoolean("hideOnlinePlayers", false),
         syncChunkWrites = json.optBoolean("syncChunkWrites", true),

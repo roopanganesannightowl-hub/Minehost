@@ -326,7 +326,9 @@ class PlayitTunnelClient(private val configProvider: suspend () -> PlayitTunnelS
     private fun register(socket: Socket): Socket {
         openSockets.add(socket)
         return socket
-    }    /**
+    }
+
+    /**
      * Surface errors as-is when they already carry a stage marker so remote
      * debugging stays possible, and translate raw socket noise into hints.
      */

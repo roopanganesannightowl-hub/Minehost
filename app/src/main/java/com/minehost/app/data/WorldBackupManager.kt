@@ -54,7 +54,12 @@ class WorldBackupManager(context: Context) {
     suspend fun import(uri: Uri, config: ServerConfig): WorldBackupResult = withContext(Dispatchers.IO) {
         val serverRoot = serverRootFor(config)
         val staging = File(appContext.filesDir, "server-import-staging")
-        val previous = File(appContext.filesDir, "server-before-import-${System.currentTimeMillis()}")
+        // Keep exactly one rollback copy: without this, every restore leaves a
+        // full workspace snapshot behind and app storage grows without bound.
+        appContext.filesDir.listFiles()
+            ?.filter { it.isDirectory && it.name.startsWith(ROLLBACK_PREFIX) }
+            ?.forEach { it.deleteRecursively() }
+        val previous = File(appContext.filesDir, "$ROLLBACK_PREFIX${System.currentTimeMillis()}")
         staging.deleteRecursively()
         try {
             val input = appContext.contentResolver.openInputStream(uri)
@@ -150,5 +155,6 @@ class WorldBackupManager(context: Context) {
     private companion object {
         const val MAX_ENTRIES = 100_000
         const val MAX_UNCOMPRESSED_BYTES = 2L * 1024L * 1024L * 1024L
+        const val ROLLBACK_PREFIX = "server-before-import-"
     }
 }

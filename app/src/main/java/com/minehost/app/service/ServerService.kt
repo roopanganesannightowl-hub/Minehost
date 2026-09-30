@@ -29,6 +29,8 @@ class ServerService : Service() {
         get() = (application as MineHostApplication).container.runtime
     private val tunnel
         get() = (application as MineHostApplication).container.tunnel
+    private val playitTunnel
+        get() = (application as MineHostApplication).container.playitTunnel
     private var wakeLock: PowerManager.WakeLock? = null
     private var observer: kotlinx.coroutines.Job? = null
     private var isForeground = false
@@ -54,12 +56,7 @@ class ServerService : Service() {
                 // A restart passes through STOPPED on purpose, so don't tear the
                 // service down mid-restart.
                 if (isForeground && startRequested && !restarting && (snapshot.phase == ServerPhase.STOPPED || snapshot.phase == ServerPhase.ERROR)) {
-                    startRequested = false
-                    tunnel.resetForServerStop()
-                    releaseWakeLock()
-                    stopForeground(STOP_FOREGROUND_REMOVE)
-                    isForeground = false
-                    stopSelf()
+                    teardown()
                 }
             }
         }
@@ -90,7 +87,9 @@ class ServerService : Service() {
                             val config = (application as MineHostApplication).container.profiles.activeConfig()
                             runtime.start(config)
                         } catch (_: Exception) {
-                            startRequested = false
+                            // The restart could not come back up: tear down now,
+                            // or a foreground notification would linger forever.
+                            teardown()
                         } finally {
                             restarting = false
                         }
@@ -140,15 +139,25 @@ class ServerService : Service() {
                 acquireWakeLock(config.keepAwake)
                 runtime.start(config)
             } catch (_: Exception) {
-                startRequested = false
-                releaseWakeLock()
-                if (isForeground) {
-                    stopForeground(STOP_FOREGROUND_REMOVE)
-                    isForeground = false
-                }
-                stopSelf()
+                teardown()
             }
         }
+    }
+
+    /**
+     * Stops hosting completely: closes both tunnels (an empty server has
+     * nothing to forward), drops the wake lock and removes the notification.
+     */
+    private fun teardown() {
+        startRequested = false
+        tunnel.resetForServerStop()
+        playitTunnel.resetForServerStop()
+        releaseWakeLock()
+        if (isForeground) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            isForeground = false
+        }
+        stopSelf()
     }
 
     private fun acquireWakeLock(enabled: Boolean) {

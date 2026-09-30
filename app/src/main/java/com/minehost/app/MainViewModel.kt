@@ -94,7 +94,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (_routerCheck.value?.mappingActive == true) {
             removeRouterMapping()
         }
+        // A stopped server has nothing to tunnel; both relays are closed so a
+        // dead endpoint is never advertised to friends.
         tunnelManager.resetForServerStop()
+        playitTunnel.resetForServerStop()
         getApplication<Application>().startService(
             Intent(getApplication<Application>(), ServerService::class.java).setAction(ServerService.ACTION_STOP)
         )
@@ -104,7 +107,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (_routerCheck.value?.mappingActive == true) {
             removeRouterMapping()
         }
-        tunnelManager.resetForServerStop()
+        // Deliberately NOT closing the tunnels: a restart keeps the same local
+        // port, so both relays (and their addresses) survive it untouched.
         ContextCompat.startForegroundService(
             getApplication<Application>(),
             Intent(getApplication<Application>(), ServerService::class.java).setAction(ServerService.ACTION_RESTART)
@@ -363,16 +367,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun saveConfig(newConfig: ServerConfig) {
         viewModelScope.launch {
             try {
-                val active = container.profiles.current().active
-                if (active != null) {
-                    container.profiles.saveConfig(active.id, newConfig)
-                } else {
-                    container.settings.save(newConfig)
-                }
+                persistConfig(newConfig)
                 _message.value = "Settings saved"
             } catch (_: Exception) {
                 _message.value = "Could not save settings"
             }
+        }
+    }
+
+    /**
+     * Persists the active profile's config without touching the snackbar, so
+     * flows that carry their own message (pack imports, world restore) are not
+     * overwritten by a late "Settings saved".
+     */
+    private suspend fun persistConfig(newConfig: ServerConfig) {
+        val active = container.profiles.current().active
+        if (active != null) {
+            container.profiles.saveConfig(active.id, newConfig)
+        } else {
+            container.settings.save(newConfig)
         }
     }
 
@@ -481,18 +494,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
         viewModelScope.launch {
             try {
-                val active = container.profiles.current().active?.config ?: config.value
-                val result = withContext(Dispatchers.IO) { container.worldBackup.import(uri, active) }
-                val current = config.value
+                val current = container.profiles.current().active?.config ?: container.settings.current()
+                val result = withContext(Dispatchers.IO) { container.worldBackup.import(uri, current) }
                 if (result.importedCorePath != null) {
-                    saveConfig(
+                    persistConfig(
                         current.copy(
                             corePath = result.importedCorePath,
                             coreName = "Imported server pack"
                         )
                     )
                 } else {
-                    saveConfig(current.copy(corePath = null, coreName = null))
+                    persistConfig(current.copy(corePath = null, coreName = null))
                 }
                 _message.value = if (result.importedCorePath != null) {
                     "Server pack restored; review Settings before starting"
@@ -528,8 +540,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             try {
                 val imported = withContext(Dispatchers.IO) { container.coreImporter.import(uri) }
-                val current = config.value
-                saveConfig(current.copy(resourcePackPath = imported.path))
+                val current = container.profiles.current().active?.config ?: container.settings.current()
+                persistConfig(current.copy(resourcePackPath = imported.path))
                 _message.value = "${imported.displayName} will be applied on the next start"
             } catch (_: Exception) {
                 _message.value = "Could not import that resource pack"
@@ -542,8 +554,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             try {
                 val imported = withContext(Dispatchers.IO) { container.coreImporter.import(uri) }
-                val current = config.value
-                saveConfig(current.copy(modpackPath = imported.path))
+                val current = container.profiles.current().active?.config ?: container.settings.current()
+                persistConfig(current.copy(modpackPath = imported.path))
                 _message.value = "${imported.displayName} will be installed on the next start"
             } catch (_: Exception) {
                 _message.value = "Could not import that mod pack"
