@@ -76,6 +76,24 @@ git tag v0.03 && git push origin v0.03
 
 The signing material lives in `keystore/` (gitignored): `release.keystore` plus `keystore.properties` with `storeFile`, `storePassword`, `keyAlias`, and `keyPassword`. **Back this directory up — losing the keystore means you can never update the published app again.** The same four values are stored as repository secrets (`KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`); `./keystore/upload-secrets.sh` uploads them with a token that may manage repository secrets.
 
+### One signing identity, and never mint a new one
+
+Every published release — v0.01 through v0.03 — is signed with the certificate whose SHA-256 is:
+
+```
+51a56dfd590be94d55837c1f8ed5b174716d37d30810826ef3483c3d7205981f
+```
+
+That certificate belongs to the keystore held in the `KEYSTORE_BASE64` secret, alias `minehost-release`. Your local `keystore/keystore.properties` must describe **that same keystore**, or locally built APKs cannot be installed over a released one.
+
+This matters more than it looks. Android refuses to update an app signed with a different certificate, so:
+
+- **Never generate a new keystore to "fix" a mismatch.** Every existing install would be forced to uninstall, taking its worlds and settings with it. Recover the original keystore instead.
+- `assembleStandardRelease` and `assembleLocalRelease` now run `verifyReleaseSignature`, which fails the build if the resulting APK is not signed with the canonical certificate. Check it any time with `./gradlew :app:verifyReleaseSignature`. It skips (with a warning) if `apksigner` cannot be found, so it never blocks an environment without build-tools.
+- A published release can only ever be updated by a build signed with this same certificate, which in practice means **CI**. Treat the `KEYSTORE_BASE64` secret as the app's permanent identity and back up whatever holds the original keystore file.
+
+A stray `keystore/ORPHAN-*.jks` may be present locally: it is an older, unrelated key kept only for reference. It is not the release key, and the guard above exists to stop anyone shipping with it by accident.
+
 ## Public access note
 
 MineHost exposes a Java Edition server with what the device can actually do on its own:
