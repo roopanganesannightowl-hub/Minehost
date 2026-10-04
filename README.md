@@ -71,7 +71,7 @@ Two GitHub Actions workflows handle releases:
 Publishing a new signed release:
 
 ```bash
-git tag v0.02 && git push origin v0.02
+git tag v0.03 && git push origin v0.03
 ```
 
 The signing material lives in `keystore/` (gitignored): `release.keystore` plus `keystore.properties` with `storeFile`, `storePassword`, `keyAlias`, and `keyPassword`. **Back this directory up — losing the keystore means you can never update the published app again.** The same four values are stored as repository secrets (`KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`); `./keystore/upload-secrets.sh` uploads them with a token that may manage repository secrets.

@@ -22,8 +22,8 @@ android {
         applicationId = "com.minehost.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 7
-        versionName = "0.02"
+        versionCode = 8
+        versionName = "0.03"
     }
 
     signingConfigs {

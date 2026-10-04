@@ -204,7 +204,9 @@ class ServerRuntime(context: Context) {
 
         val workspace = try {
             withContext(Dispatchers.IO) {
-                ServerWorkspace(appContext).prepare(config)
+                ServerWorkspace(appContext).prepare(config) { warning ->
+                    appendLog(warning, ConsoleLevel.WARNING)
+                }
             }
         } catch (error: Exception) {
             fail("Could not prepare the server workspace: ${error.message.orEmpty()}")
@@ -705,11 +707,30 @@ private class ServerWorkspace(private val context: Context) {
      * so Paper loads them on boot. JARs the user removed from Settings are
      * deleted from the workspace here too — otherwise an uninstall would only
      * be cosmetic and the plugin would keep loading.
+     *
+     * A plugin problem is reported as a warning, never fatal: one bad JAR must
+     * not stop a server that is otherwise ready to boot.
      */
-    private fun installPlugins(root: File, config: ServerConfig) {
+    private fun installPlugins(root: File, config: ServerConfig, onWarning: (String) -> Unit) {
+        runCatching {
+            installPluginsOrThrow(root, config)
+        }.onFailure { error ->
+            onWarning("Could not update the plugins folder: ${error.message.orEmpty()}")
+        }
+    }
+
+    private fun installPluginsOrThrow(root: File, config: ServerConfig) {
         val pluginDirectory = File(root, "plugins").apply { mkdirs() }
         val managed = File(root, MANAGED_PLUGINS_FILE)
-        val previous = managed.readLines().map { it.trim() }.filter { it.isNotBlank() }.toSet()
+        // The manifest only exists after a start that had plugins; on a first
+        // start there is nothing to read and readLines() would throw ENOENT,
+        // which would take the whole server down before it boots.
+        val previous = if (managed.isFile) {
+            runCatching { managed.readLines() }.getOrDefault(emptyList())
+                .map { it.trim() }.filter { it.isNotBlank() }.toSet()
+        } else {
+            emptySet()
+        }
         val current = LinkedHashSet<String>()
 
         for (path in config.pluginPaths) {
@@ -742,12 +763,12 @@ private class ServerWorkspace(private val context: Context) {
         }
     }.getOrDefault(false)
 
-    fun prepare(config: ServerConfig): File {
+    fun prepare(config: ServerConfig, onWarning: (String) -> Unit = {}): File {
         val root = rootFor(config)
         root.mkdirs()
         File(root, "eula.txt").writeText(if (config.acceptEula) "eula=true\n" else "eula=false\n")
         installPacks(root, config)
-        installPlugins(root, config)
+        installPlugins(root, config, onWarning)
 
         val properties = Properties().apply {
             setProperty("motd", config.motd.replace(Regex("[\\r\\n]"), " "))
