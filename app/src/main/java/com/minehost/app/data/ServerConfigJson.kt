@@ -47,6 +47,7 @@ object ServerConfigJson {
         put("resourcePackPrompt", config.resourcePackPrompt)
         put("resourcePackPath", config.resourcePackPath)
         put("modpackPath", config.modpackPath)
+        put("pluginPaths", org.json.JSONArray(config.pluginPaths))
         put("enableStatus", config.enableStatus)
         put("hideOnlinePlayers", config.hideOnlinePlayers)
         put("syncChunkWrites", config.syncChunkWrites)
@@ -95,6 +96,9 @@ object ServerConfigJson {
         // explicit JSON null as the literal string "null".
         resourcePackPath = json.optStringOrNull("resourcePackPath")?.takeIf { it.isNotBlank() },
         modpackPath = json.optStringOrNull("modpackPath")?.takeIf { it.isNotBlank() },
+        pluginPaths = json.optJSONArray("pluginPaths")?.let { array ->
+            (0 until array.length()).mapNotNull { array.optString(it).takeIf { path -> path.isNotBlank() } }
+        } ?: emptyList(),
         enableStatus = json.optBoolean("enableStatus", true),
         hideOnlinePlayers = json.optBoolean("hideOnlinePlayers", false),
         syncChunkWrites = json.optBoolean("syncChunkWrites", true),

@@ -700,6 +700,41 @@ private class ServerWorkspace(private val context: Context) {
         }
     }
 
+    /**
+     * Mirrors the configured plugin JARs into the workspace `plugins/` folder
+     * so Paper loads them on boot. JARs the user removed from Settings are
+     * deleted from the workspace here too — otherwise an uninstall would only
+     * be cosmetic and the plugin would keep loading.
+     */
+    private fun installPlugins(root: File, config: ServerConfig) {
+        val pluginDirectory = File(root, "plugins").apply { mkdirs() }
+        val managed = File(root, MANAGED_PLUGINS_FILE)
+        val previous = managed.readLines().map { it.trim() }.filter { it.isNotBlank() }.toSet()
+        val current = LinkedHashSet<String>()
+
+        for (path in config.pluginPaths) {
+            val source = path.takeIf { it.isNotBlank() }?.let(::File) ?: continue
+            if (!source.isFile || source.length() == 0L) continue
+            // Only JARs the app imported itself: never trust arbitrary paths.
+            if (!source.canonicalPath.startsWith(context.filesDir.canonicalPath + File.separator)) continue
+            val name = source.name
+            val target = File(pluginDirectory, name)
+            if (source.canonicalPath != target.canonicalPath &&
+                (!target.exists() || target.length() != source.length())
+            ) {
+                target.delete()
+                source.copyTo(target, overwrite = true)
+            }
+            current += name
+        }
+
+        // Plugins the user removed in Settings stop being managed here.
+        for (name in previous - current) {
+            File(pluginDirectory, name).takeIf { it.isFile }?.delete()
+        }
+        managed.writeText(current.joinToString("\n"))
+    }
+
     private fun isZipArchive(file: File): Boolean = runCatching {
         file.inputStream().use { input ->
             val header = ByteArray(2)
@@ -712,6 +747,7 @@ private class ServerWorkspace(private val context: Context) {
         root.mkdirs()
         File(root, "eula.txt").writeText(if (config.acceptEula) "eula=true\n" else "eula=false\n")
         installPacks(root, config)
+        installPlugins(root, config)
 
         val properties = Properties().apply {
             setProperty("motd", config.motd.replace(Regex("[\\r\\n]"), " "))
@@ -749,5 +785,10 @@ private class ServerWorkspace(private val context: Context) {
         }
         File(root, "server.properties").outputStream().use { properties.store(it, "MineHost server settings") }
         return root
+    }
+
+    private companion object {
+        /** Lists the plugin JARs MineHost copied in, one file name per line. */
+        const val MANAGED_PLUGINS_FILE = ".minehost-plugins"
     }
 }

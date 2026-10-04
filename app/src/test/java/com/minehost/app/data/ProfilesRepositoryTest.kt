@@ -50,6 +50,20 @@ class ProfilesRepositoryTest {
     }
 
     @Test
+    fun `config json round-trips imported plugin paths`() {
+        val config = ServerConfig(
+            pluginPaths = listOf("/data/plugins/EssentialsX.jar", "/data/plugins/Vault.jar")
+        )
+        val decoded = ServerConfigJson.fromJson(ServerConfigJson.toJson(config))
+        assertEquals(config.pluginPaths, decoded.pluginPaths)
+    }
+
+    @Test
+    fun `old config json without plugin paths decodes to none`() {
+        assertEquals(emptyList<String>(), ServerConfigJson.fromJson(org.json.JSONObject()).pluginPaths)
+    }
+
+    @Test
     fun `state falls back to the first profile when active is unknown`() {
         val state = ProfilesState(
             profiles = listOf(profile("a"), profile("b")),

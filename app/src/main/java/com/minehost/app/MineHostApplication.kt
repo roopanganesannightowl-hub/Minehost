@@ -3,6 +3,7 @@ package com.minehost.app
 import android.app.Application
 import com.minehost.app.data.CoreImporter
 import com.minehost.app.data.PlayitTunnelClient
+import com.minehost.app.data.PluginImporter
 import com.minehost.app.data.ProfilesRepository
 import com.minehost.app.data.SettingsRepository
 import com.minehost.app.data.RouterDiagnosticsManager
@@ -26,6 +27,7 @@ class AppContainer(private val application: Application) {
     val settings = SettingsRepository(application)
     val profiles = ProfilesRepository(application)
     val coreImporter = CoreImporter(application)
+    val pluginImporter = PluginImporter(application)
     val runtime = ServerRuntime(application)
     val routerDiagnostics = RouterDiagnosticsManager(application)
     val worldBackup = WorldBackupManager(application)

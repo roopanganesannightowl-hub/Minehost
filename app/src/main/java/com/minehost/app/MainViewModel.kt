@@ -30,6 +30,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -559,6 +560,42 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _message.value = "${imported.displayName} will be installed on the next start"
             } catch (_: Exception) {
                 _message.value = "Could not import that mod pack"
+            }
+        }
+    }
+
+    /**
+     * Imports a single plugin JAR; it is copied into the workspace `plugins/`
+     * folder on the next server start. Importing the same file again replaces
+     * the previous copy instead of listing it twice.
+     */
+    fun importPlugin(uri: Uri) {
+        viewModelScope.launch {
+            try {
+                val imported = container.pluginImporter.import(uri)
+                val current = container.profiles.current().active?.config ?: container.settings.current()
+                val paths = current.pluginPaths
+                    .filterNot { File(it).name == imported.fileName }
+                    .plus(imported.path)
+                val label = imported.descriptor.label().ifBlank { imported.fileName }
+                persistConfig(current.copy(pluginPaths = paths))
+                _message.value = "$label will load on the next start"
+            } catch (error: Exception) {
+                _message.value = error.message ?: "Could not import that plugin"
+            }
+        }
+    }
+
+    /** Removes a plugin from the config and deletes the app's copy of the JAR. */
+    fun removePlugin(path: String) {
+        viewModelScope.launch {
+            try {
+                val current = container.profiles.current().active?.config ?: container.settings.current()
+                persistConfig(current.copy(pluginPaths = current.pluginPaths - path))
+                container.pluginImporter.delete(path)
+                _message.value = "Plugin removed; restart the server to unload it"
+            } catch (_: Exception) {
+                _message.value = "Could not remove that plugin"
             }
         }
     }

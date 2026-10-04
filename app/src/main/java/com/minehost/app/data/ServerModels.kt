@@ -75,6 +75,12 @@ data class ServerConfig(
     val resourcePackPath: String? = null,
     /** Absolute path of an imported mod/plugin pack copied into the workspace. */
     val modpackPath: String? = null,
+    /**
+     * Absolute paths of individually imported plugin JARs, in the app's own
+     * `plugins/` storage. They are copied into the workspace `plugins/` folder
+     * on the next server start.
+     */
+    val pluginPaths: List<String> = emptyList(),
     val enableStatus: Boolean = true,
     val hideOnlinePlayers: Boolean = false,
     val syncChunkWrites: Boolean = true,

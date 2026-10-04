@@ -267,6 +267,8 @@ private fun MineHostContent(viewModel: MainViewModel) {
                     onSetAutoOpenTunnel = viewModel::setAutoOpenTunnel,
                     onImportResourcePack = viewModel::importResourcePack,
                     onImportModpack = viewModel::importModpack,
+                    onImportPlugin = viewModel::importPlugin,
+                    onRemovePlugin = viewModel::removePlugin,
                     // Derived here so Settings only recomposes on real transitions,
                     // not on every coalesced snapshot emission.
                     serverRunning = snapshot.phase == ServerPhase.RUNNING,

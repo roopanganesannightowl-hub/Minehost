@@ -120,6 +120,8 @@ fun SettingsScreen(
     onSetAutoOpenTunnel: (Boolean) -> Unit,
     onImportResourcePack: (Uri) -> Unit,
     onImportModpack: (Uri) -> Unit,
+    onImportPlugin: (Uri) -> Unit,
+    onRemovePlugin: (String) -> Unit,
     serverRunning: Boolean,
     onMessage: (String) -> Unit,
     modifier: Modifier = Modifier
@@ -155,7 +157,11 @@ fun SettingsScreen(
             corePath = if (draft.corePath == old.corePath) config.corePath else draft.corePath,
             coreName = if (draft.coreName == old.coreName) config.coreName else draft.coreName,
             resourcePackPath = if (draft.resourcePackPath == old.resourcePackPath) config.resourcePackPath else draft.resourcePackPath,
-            modpackPath = if (draft.modpackPath == old.modpackPath) config.modpackPath else draft.modpackPath
+            modpackPath = if (draft.modpackPath == old.modpackPath) config.modpackPath else draft.modpackPath,
+            // Plugins are added and removed outside this screen, so they must
+            // follow the saved config or a later "Save changes" would drop the
+            // plugin the user just imported.
+            pluginPaths = if (draft.pluginPaths == old.pluginPaths) config.pluginPaths else draft.pluginPaths
         )
     }
     var javaCheck by remember { mutableStateOf<JavaRuntimeCheck?>(null) }
@@ -179,6 +185,9 @@ fun SettingsScreen(
     val modpackPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri -> uri?.let(onImportModpack) }
+    val pluginPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri -> uri?.let(onImportPlugin) }
     val exportPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/zip")
     ) { uri -> uri?.let(onExportWorld) }
@@ -985,7 +994,13 @@ fun SettingsScreen(
                         .onFailure { onMessage("No file picker is available") }
                 },
                 onClearResourcePack = { draft = draft.copy(resourcePackPath = null) },
-                onClearModpack = { draft = draft.copy(modpackPath = null) }
+                onClearModpack = { draft = draft.copy(modpackPath = null) },
+                onPickPlugin = {
+                    runCatching { pluginPicker.launch(arrayOf("application/java-archive", "application/zip", "application/octet-stream")) }
+                        .onFailure { onMessage("No file picker is available") }
+                },
+                onRemovePlugin = onRemovePlugin,
+                serverRunning = serverRunning
             )
         }
 
@@ -1579,7 +1594,10 @@ private fun PacksCard(
     onPickResourcePack: () -> Unit,
     onPickModpack: () -> Unit,
     onClearResourcePack: () -> Unit,
-    onClearModpack: () -> Unit
+    onClearModpack: () -> Unit,
+    onPickPlugin: () -> Unit,
+    onRemovePlugin: (String) -> Unit,
+    serverRunning: Boolean
 ) {
     SettingsCard {
         Text("Modpacks and resource packs", style = MaterialTheme.typography.titleMedium)
@@ -1612,6 +1630,63 @@ private fun PacksCard(
             onPick = onPickModpack,
             onClear = onClearModpack
         )
+        Spacer(Modifier.height(8.dp))
+        SettingDivider()
+        Spacer(Modifier.height(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text("Plugins", style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    when {
+                        config.pluginPaths.isNotEmpty() ->
+                            "${config.pluginPaths.size} installed — copied into plugins/ on start"
+                        serverRunning -> "Paper/Spigot .jar files, loaded on the next start"
+                        else -> "Paper/Spigot .jar files, loaded when the server starts"
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            TextButton(onClick = onPickPlugin) { Text("Add plugin") }
+        }
+        if (config.pluginPaths.isEmpty()) {
+            Text(
+                "Needs a Paper or Spigot core — vanilla and Fabric servers ignore plugins/.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        } else {
+            config.pluginPaths.forEach { path ->
+                PluginRow(
+                    path = path,
+                    onRemove = { onRemovePlugin(path) }
+                )
+            }
+            if (serverRunning) {
+                Text(
+                    "Restart the server to load the changes.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PluginRow(path: String, onRemove: () -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
+    ) {
+        Text(
+            path.substringAfterLast('/'),
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.weight(1f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        TextButton(onClick = onRemove) { Text("Remove") }
     }
 }
 

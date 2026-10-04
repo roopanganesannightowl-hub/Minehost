@@ -52,6 +52,7 @@ class SettingsRepository(private val context: Context) {
         val resourcePackPrompt = stringPreferencesKey("resource_pack_prompt")
         val resourcePackPath = stringPreferencesKey("resource_pack_path")
         val modpackPath = stringPreferencesKey("modpack_path")
+        val pluginPaths = stringPreferencesKey("plugin_paths")
         val enableStatus = booleanPreferencesKey("enable_status")
         val hideOnlinePlayers = booleanPreferencesKey("hide_online_players")
         val syncChunkWrites = booleanPreferencesKey("sync_chunk_writes")
@@ -156,6 +157,7 @@ class SettingsRepository(private val context: Context) {
                 resourcePackPrompt = preferences[Keys.resourcePackPrompt] ?: "",
                 resourcePackPath = preferences[Keys.resourcePackPath]?.takeIf { it.isNotBlank() },
                 modpackPath = preferences[Keys.modpackPath]?.takeIf { it.isNotBlank() },
+                pluginPaths = decodePluginPaths(preferences[Keys.pluginPaths]),
                 enableStatus = preferences[Keys.enableStatus] ?: true,
                 hideOnlinePlayers = preferences[Keys.hideOnlinePlayers] ?: false,
                 syncChunkWrites = preferences[Keys.syncChunkWrites] ?: true,
@@ -209,6 +211,8 @@ class SettingsRepository(private val context: Context) {
                 ?: preferences.remove(Keys.resourcePackPath)
             config.modpackPath?.let { preferences[Keys.modpackPath] = it }
                 ?: preferences.remove(Keys.modpackPath)
+            if (config.pluginPaths.isEmpty()) preferences.remove(Keys.pluginPaths)
+            else preferences[Keys.pluginPaths] = encodePluginPaths(config.pluginPaths)
             preferences[Keys.enableStatus] = config.enableStatus
             preferences[Keys.hideOnlinePlayers] = config.hideOnlinePlayers
             preferences[Keys.syncChunkWrites] = config.syncChunkWrites
@@ -216,5 +220,19 @@ class SettingsRepository(private val context: Context) {
             preferences[Keys.allowNether] = config.allowNether
             preferences[Keys.generateStructures] = config.generateStructures
         }
+    }
+
+    private companion object {
+        /**
+         * DataStore has no string-set type, so the legacy single-server
+         * preference store keeps the list as one newline-joined string.
+         * App-generated paths never contain a newline.
+         */
+        fun encodePluginPaths(paths: List<String>): String =
+            paths.filter { it.isNotBlank() && !it.contains('\n') }.joinToString("\n")
+
+        fun decodePluginPaths(stored: String?): List<String> =
+            stored?.lineSequence()?.map { it.trim() }?.filter { it.isNotBlank() }?.toList()
+                ?: emptyList()
     }
 }
